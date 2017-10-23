@@ -13,7 +13,8 @@
 
 #include <stdio.h>
 #include <assert.h>
-
+#include <stdlib.h>
+#include <string.h>
 
 #include "sr_if.h"
 #include "sr_rt.h"
@@ -21,6 +22,33 @@
 #include "sr_protocol.h"
 #include "sr_arpcache.h"
 #include "sr_utils.h"
+
+void sr_handlepacket(struct sr_instance* sr,
+        uint8_t * packet/* lent */,
+        unsigned int len,
+        char* interface/* lent */);
+
+void sr_handlepacket_IP(struct sr_instance* sr,
+        uint8_t * packet,
+        unsigned int len,
+        char* interface);
+
+void sr_forwardpacket_IP(struct sr_instance* sr,
+        uint8_t * packet,
+        unsigned int len,
+        char* interface,
+        struct sr_ip_hdr *IP_hdr);
+
+void sr_handlepacket_ICMP(struct sr_instance* sr,
+        uint8_t * packet,
+        unsigned int len,
+        char* interface);
+
+void sr_handlepacket_ARP(struct sr_instance* sr,
+        uint8_t * packet,
+        unsigned int len,
+        char* interface);
+
 
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
