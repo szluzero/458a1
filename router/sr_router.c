@@ -113,7 +113,6 @@ void sr_handlepacket(struct sr_instance* sr,
   }
 
   print_hdrs(packet, len);
-  printf("%d", ethertype_ip);
   /* Check if it's an IP packet or an ARP packet */ 
   if (ethertype_ip == ethertype(packet)) {
     printf("IP\n");
@@ -129,7 +128,7 @@ void sr_handlepacket_IP(struct sr_instance* sr,
 	unsigned int len,
 	char* interface)
 {
-  sr_ip_hdr_t *IP_hdr = (sr_ip_hdr_t *)(packet + sizeof(sr_ethernet_hdr_t));
+  sr_ip_hdr_t *IP_hdr = (sr_ip_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
  
  /* Verify minimum IP packet length */
  if (len < sizeof(struct sr_ip_hdr) + sizeof(struct sr_ethernet_hdr)) {
@@ -228,4 +227,79 @@ void sr_handlepacket_ARP(struct sr_instance* sr,
  	uint8_t * packet,
 	unsigned int len,
 	char* interface)
-{   }
+{
+  sr_arp_hdr_t *ARP_hdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+
+  /* Check if ethernet */  
+  if (ntohs(ARP_hdr->ar_hrd) != arp_hrd_ethernet) {
+    return;
+  }
+
+  /* Check length */
+  if (len < sizeof(struct sr_ethernet_hdr) + sizeof(struct sr_arp_hdr)) {
+    return;
+  }
+
+  /* Check IP */
+  if (ntohs(ARP_hdr->ar_pro) != ethertype_ip) {
+    return;
+  }
+
+  /* Check if it is for this router */
+  struct sr_if* intface = sr_get_interface(sr, interface);
+  if (ARP_hdr->ar_tip != intface->ip) {
+    return;
+  }
+  
+  /* Check if arp request or reply */
+  if (ntohs(ARP_hdr->ar_op) == arp_op_request) {
+    printf("ARP request\n");
+
+    uint8_t *sr_packet = (uint8_t *) malloc(len);
+    memcpy(sr_packet, packet, len);
+    /* Get reply ethernet and arp headers */
+    sr_ethernet_hdr_t *r_ethnet_hdr = (sr_ethernet_hdr_t *) sr_packet;
+    sr_arp_hdr_t *r_arp_hdr = (sr_arp_hdr_t *) (sr_packet + sizeof(sr_ethernet_hdr_t));
+    
+    memcpy(r_ethnet_hdr->ether_dhost, r_ethnet_hdr->ether_shost, ETHER_ADDR_LEN);
+    memcpy(r_ethnet_hdr->ether_shost, intface->addr, ETHER_ADDR_LEN);
+
+    r_arp_hdr->ar_op = arp_op_reply;
+    r_arp_hdr->ar_sip = intface->ip;
+    r_arp_hdr->ar_tip = ARP_hdr->ar_sip;
+    memcpy(r_arp_hdr->ar_sha, intface->addr, ETHER_ADDR_LEN);
+    memcpy(r_arp_hdr->ar_tha, ARP_hdr->ar_sha, ETHER_ADDR_LEN);
+    
+    print_hdrs(sr_packet, len);
+    sr_send_packet(sr, sr_packet, len, interface);
+    free(sr_packet);
+     
+  } else {
+    printf("ARP reply\n");
+    
+    /* Cache reply */
+    struct sr_arpreq *was_cached; 
+    was_cached = sr_arpcache_insert(&sr->cache,ARP_hdr->ar_sha, ARP_hdr->ar_sip);
+    
+    if (was_cached) {
+      struct sr_if* out_interface;
+      struct sr_packet *ARP_packet = was_cached->packets;
+      sr_ethernet_hdr_t *ethnet_hdr;
+
+      while (ARP_packet) {
+        out_interface = sr_get_interface(sr, ARP_packet->iface);
+
+        ethnet_hdr = (sr_ethernet_hdr_t *) (ARP_packet->buf);
+        memcpy(ethnet_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
+        memcpy(ethnet_hdr->ether_dhost, ARP_hdr->ar_sha, ETHER_ADDR_LEN);
+    
+        sr_send_packet(sr, ARP_packet->buf, ARP_packet->len, ARP_packet->iface);
+        
+        ARP_packet = ARP_packet->next;
+      }
+
+      sr_arpreq_destroy(&sr->cache, was_cached);
+    }
+  }
+  return;
+}
