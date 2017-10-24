@@ -109,6 +109,7 @@ void sr_handlepacket(struct sr_instance* sr,
   /* fill in code here */
   /* Verify minimum packet length */
   if (len < sizeof(sr_ethernet_hdr_t)) {
+    /* Too short */
     return;
   }
 
@@ -118,6 +119,7 @@ void sr_handlepacket(struct sr_instance* sr,
     printf("IP\n");
     sr_handlepacket_IP(sr, packet, len, interface);
   } else {
+    printf("ARP\n");
     sr_handlepacket_ARP(sr, packet, len, interface);
   }
   
@@ -137,12 +139,17 @@ void sr_handlepacket_IP(struct sr_instance* sr,
 
  /* Verify IPv4 */
  if (IP_hdr->ip_v != 4) {
+   printf("not ipv4\n");
    return;
  }
  /* Verify checksum */
   uint16_t given_cksum = IP_hdr->ip_sum;
+  IP_hdr->ip_sum = 0;
   uint16_t expected_cksum = cksum(IP_hdr, sizeof(sr_ip_hdr_t));
   if (given_cksum != expected_cksum) {
+    printf("cksum wrong\n");
+    printf("%d\n", given_cksum);
+    printf("%d\n", expected_cksum);
     return;
   }
 
@@ -159,12 +166,15 @@ void sr_handlepacket_IP(struct sr_instance* sr,
 
   if (packet_for_this_router == 1) {
     if (IP_hdr->ip_p == ip_protocol_icmp) {
+      printf("handle ICMP\n");
       sr_handlepacket_ICMP(sr, packet, len, interface);
     } else {
       return;
+      printf("send ICMP\n");
       /*sr_send_ICMP()*/
     }
   } else {
+    printf("forward packet\n");
     sr_forwardpacket_IP(sr, packet, len, interface, IP_hdr);
   }
   
@@ -182,7 +192,8 @@ void sr_forwardpacket_IP(struct sr_instance* sr,
   /* Recompute checksum */
   IP_hdr->ip_sum = 0;
   IP_hdr->ip_sum = cksum(IP_hdr, sizeof(sr_ip_hdr_t));
-  
+ 
+  printf("Longest prefix match\n"); 
   /* Longest prefix match */
   uint32_t dest_ip = IP_hdr->ip_dst;
   struct sr_rt* rt = sr->routing_table;
@@ -191,7 +202,7 @@ void sr_forwardpacket_IP(struct sr_instance* sr,
 
   while (rt) {
     if ((dest_ip & rt->mask.s_addr) == (rt->dest.s_addr & rt->mask.s_addr)) {
-	if (longest_match_len <= rt->mask.s_addr) {
+        if (longest_match_len <= rt->mask.s_addr) {
           longest_match_len = rt->mask.s_addr;
 	  match = rt;
 	}
@@ -209,10 +220,15 @@ void sr_forwardpacket_IP(struct sr_instance* sr,
     memcpy(ethernet_hdr->ether_dhost, arp_entry->mac, ETHER_ADDR_LEN);
     memcpy(ethernet_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
 
+    printf("printing ip packet before send\n");
+    print_hdrs(sr_packet, len);
     sr_send_packet(sr, sr_packet, len, match->interface);
     free(arp_entry);
   } else {
-    sr_arpcache_queuereq(&sr->cache, match->gw.s_addr, packet, len, match->interface);
+    printf("Not in the cache\n");
+    sr_ethernet_hdr_t *ethernet_hdr = (sr_ethernet_hdr_t *) packet;
+    memcpy(ethernet_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
+    sr_arpcache_queuereq(&sr->cache, dest_ip, packet, len, match->interface);
   }
   free(match);
 }
@@ -230,30 +246,26 @@ void sr_handlepacket_ARP(struct sr_instance* sr,
 {
   sr_arp_hdr_t *ARP_hdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
 
-  /* Check if ethernet */  
-  if (ntohs(ARP_hdr->ar_hrd) != arp_hrd_ethernet) {
-    return;
-  }
-
   /* Check length */
   if (len < sizeof(struct sr_ethernet_hdr) + sizeof(struct sr_arp_hdr)) {
+    printf("Too short\n");
     return;
   }
 
-  /* Check IP */
-  if (ntohs(ARP_hdr->ar_pro) != ethertype_ip) {
-    return;
-  }
-
-  /* Check if it is for this router */
+  /* Check if it is for this router*/ 
   struct sr_if* intface = sr_get_interface(sr, interface);
-  if (ARP_hdr->ar_tip != intface->ip) {
+   if (ARP_hdr->ar_tip != intface->ip) {
+    printf("Not for this router\n");
+    printf("%d\n", htons(ARP_hdr->ar_tip));
+    printf("%d\n", htons(intface->ip));
     return;
   }
   
   /* Check if arp request or reply */
   if (ntohs(ARP_hdr->ar_op) == arp_op_request) {
     printf("ARP request\n");
+    printf("%d\n", arp_op_reply);
+    printf("%d\n", arp_op_request);
 
     uint8_t *sr_packet = (uint8_t *) malloc(len);
     memcpy(sr_packet, packet, len);
@@ -264,15 +276,18 @@ void sr_handlepacket_ARP(struct sr_instance* sr,
     memcpy(r_ethnet_hdr->ether_dhost, r_ethnet_hdr->ether_shost, ETHER_ADDR_LEN);
     memcpy(r_ethnet_hdr->ether_shost, intface->addr, ETHER_ADDR_LEN);
 
-    r_arp_hdr->ar_op = arp_op_reply;
+    r_arp_hdr->ar_op = htons(arp_op_reply);
     r_arp_hdr->ar_sip = intface->ip;
     r_arp_hdr->ar_tip = ARP_hdr->ar_sip;
     memcpy(r_arp_hdr->ar_sha, intface->addr, ETHER_ADDR_LEN);
     memcpy(r_arp_hdr->ar_tha, ARP_hdr->ar_sha, ETHER_ADDR_LEN);
     
     print_hdrs(sr_packet, len);
-    sr_send_packet(sr, sr_packet, len, interface);
+    int ret =  sr_send_packet(sr, sr_packet, len, interface);
+    printf("RETURN IS ");
+    printf("%d\n", ret);
     free(sr_packet);
+    printf("Reply sent\n");
      
   } else {
     printf("ARP reply\n");
@@ -292,7 +307,8 @@ void sr_handlepacket_ARP(struct sr_instance* sr,
         ethnet_hdr = (sr_ethernet_hdr_t *) (ARP_packet->buf);
         memcpy(ethnet_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
         memcpy(ethnet_hdr->ether_dhost, ARP_hdr->ar_sha, ETHER_ADDR_LEN);
-    
+        
+        print_hdrs(ARP_packet->buf, ARP_packet->len);    
         sr_send_packet(sr, ARP_packet->buf, ARP_packet->len, ARP_packet->iface);
         
         ARP_packet = ARP_packet->next;
@@ -301,5 +317,4 @@ void sr_handlepacket_ARP(struct sr_instance* sr,
       sr_arpreq_destroy(&sr->cache, was_cached);
     }
   }
-  return;
 }
