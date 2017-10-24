@@ -216,27 +216,30 @@ void sr_forwardpacket_IP(struct sr_instance* sr,
     rt = rt->next;
   }
 
-  /* TODO if rt == 0  send ICMP unreachable*/
-  struct sr_if *out_interface = sr_get_interface(sr, match->interface);
-  struct sr_arpentry *arp_entry = sr_arpcache_lookup(&sr->cache, match->gw.s_addr);
-  if (arp_entry) {
-    uint8_t *sr_packet = (uint8_t *) malloc(len);
-    memcpy(sr_packet, packet, len);
-    sr_ethernet_hdr_t *ethernet_hdr = (sr_ethernet_hdr_t *) sr_packet;
-    memcpy(ethernet_hdr->ether_dhost, arp_entry->mac, ETHER_ADDR_LEN);
-    memcpy(ethernet_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
+  if (match) {
+    struct sr_if *out_interface = sr_get_interface(sr, match->interface);
+    struct sr_arpentry *arp_entry = sr_arpcache_lookup(&sr->cache, match->gw.s_addr);
+    if (arp_entry) {
+      uint8_t *sr_packet = (uint8_t *) malloc(len);
+      memcpy(sr_packet, packet, len);
+      sr_ethernet_hdr_t *ethernet_hdr = (sr_ethernet_hdr_t *) sr_packet;
+      memcpy(ethernet_hdr->ether_dhost, arp_entry->mac, ETHER_ADDR_LEN);
+      memcpy(ethernet_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
 
-    printf("printing ip packet before send\n");
-    print_hdrs(sr_packet, len);
-    sr_send_packet(sr, sr_packet, len, match->interface);
-    free(arp_entry);
+      printf("printing ip packet before send\n");
+      print_hdrs(sr_packet, len);
+      sr_send_packet(sr, sr_packet, len, match->interface);
+      free(arp_entry);
+    } else {
+      printf("Not in the cache\n");
+      sr_ethernet_hdr_t *ethernet_hdr = (sr_ethernet_hdr_t *) packet;
+      memcpy(ethernet_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
+      sr_arpcache_queuereq(&sr->cache, dest_ip, packet, len, match->interface);
+    }
+    free(match);
   } else {
-    printf("Not in the cache\n");
-    sr_ethernet_hdr_t *ethernet_hdr = (sr_ethernet_hdr_t *) packet;
-    memcpy(ethernet_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
-    sr_arpcache_queuereq(&sr->cache, dest_ip, packet, len, match->interface);
+    printf("ICMP unreachable");
   }
-  free(match);
 }
 
 void sr_handlepacket_ICMP(struct sr_instance* sr,
