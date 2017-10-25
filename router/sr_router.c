@@ -275,13 +275,14 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
     unsigned int orig_len = len - sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_hdr_t);
     uint8_t *orig = (uint8_t *) (packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_hdr_t));
     unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_hdr_t) + orig_len;
-    uint8_t *sr_packet = (uint8_t *) malloc(len);
+    uint8_t *sr_packet = (uint8_t *) malloc(length);
     memcpy(sr_packet, packet, len);
     sr_ip_hdr_t *ICMP_IP_hdr = (sr_ip_hdr_t *) (sr_packet + sizeof(sr_ethernet_hdr_t));
 
     sr_icmp_hdr_t *ICMP_hdr = (sr_icmp_hdr_t *) (sr_packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
     ICMP_hdr->icmp_type = type;
     ICMP_hdr->icmp_code = code;
+    ICMP_hdr->icmp_sum = cksum((void *) ICMP_hdr, ntohs(ICMP_IP_hdr->ip_len) - sizeof(sr_ip_hdr_t));
 
     uint32_t dest = ICMP_IP_hdr->ip_src;
     ICMP_IP_hdr->ip_src = ICMP_IP_hdr->ip_dst;
