@@ -10,6 +10,54 @@
 #include "sr_router.h"
 #include "sr_if.h"
 #include "sr_protocol.h"
+#include "sr_utils.h"
+
+void handle_arpreq(struct sr_instance *sr, struct sr_arpreq * arp_req) {
+  /* Get current time */
+  time_t now = time(NULL);
+
+  if (difftime(now, arp_req->sent) >= 1.0) {
+    if (arp_req->times_sent >= 5) {
+      printf("ICMP unreachable\n");
+      struct sr_packet *packet = arp_req->packets;
+      while(packet) {
+        sr_sendpacket_ICMP(sr, packet->buf, packet->len, arp_req->packets->iface,  3, 1);
+        packet = packet->next;
+      }
+      sr_arpreq_destroy(&sr->cache, arp_req);
+    } else {
+      printf("Send ARP request\n");
+      struct sr_if *out_interface = sr_get_interface(sr, arp_req->packets->iface);
+   
+      int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
+      uint8_t *sr_packet = malloc(length);
+
+      sr_ethernet_hdr_t *ethnet_hdr = (sr_ethernet_hdr_t *) sr_packet;
+      sr_arp_hdr_t *ARP_hdr = (sr_arp_hdr_t *) (sr_packet + sizeof(sr_ethernet_hdr_t));
+      memset(ethnet_hdr->ether_dhost, 255, ETHER_ADDR_LEN);
+      memcpy(ethnet_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
+      ethnet_hdr->ether_type = htons(ethertype_arp);
+      ARP_hdr->ar_hrd = (unsigned short) htons(arp_hrd_ethernet);
+      ARP_hdr->ar_pro = (unsigned short) htons(ethertype_ip);
+      ARP_hdr->ar_hln = (unsigned char) ETHER_ADDR_LEN;
+      ARP_hdr->ar_pln = (unsigned char) sizeof(uint32_t);
+      ARP_hdr->ar_op = (unsigned short) htons(arp_op_request);
+      memcpy(ARP_hdr->ar_sha, out_interface->addr, ETHER_ADDR_LEN);
+      ARP_hdr->ar_tip = arp_req->ip;
+      memset(ARP_hdr->ar_tha, 0, ETHER_ADDR_LEN);
+      ARP_hdr->ar_sip = out_interface->ip;
+    
+      printf("ARP REQ HEADERS\n");
+      print_hdrs(sr_packet, length);
+      sr_send_packet(sr, sr_packet, length, out_interface->name);
+      free(sr_packet);
+
+      arp_req->sent = now;
+      arp_req->times_sent++;
+    }
+  }
+}
+
 
 /* 
   This function gets called every second. For each request sent out, we keep
@@ -17,7 +65,14 @@
   See the comments in the header file for an idea of what it should look like.
 */
 void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
-    /* Fill this in */
+    struct sr_arpreq *arp_req = sr->cache.requests;
+
+    struct sr_arpreq *next_req = NULL;
+    while (arp_req) {
+      next_req = arp_req->next;
+      handle_arpreq(sr, arp_req);
+      arp_req = next_req;
+    }
 }
 
 /* You should not need to touch the rest of this code. */
