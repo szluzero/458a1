@@ -255,6 +255,10 @@ void sr_handlepacket_ICMP(struct sr_instance* sr,
 {
   sr_ip_hdr_t *IP_hdr = (sr_ip_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
   sr_icmp_hdr_t *ICMP_hdr = (sr_icmp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
+  
+  if (IP_hdr->ip_ttl < 2) {
+    sr_sendpacket_ICMP(sr, packet, len, interface, 11, 0);
+  }
   /* Verify checksum */
   uint16_t given_cksum = ICMP_hdr->icmp_sum;
   ICMP_hdr->icmp_sum = 0;
