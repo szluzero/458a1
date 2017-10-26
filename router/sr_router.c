@@ -180,8 +180,13 @@ void sr_handlepacket_IP(struct sr_instance* sr,
       sr_sendpacket_ICMP(sr, packet, len, interface, 3, 3);
     }
   } else {
-    printf("forward packet\n");
-    sr_forwardpacket_IP(sr, packet, len, interface, IP_hdr);
+    if (IP_hdr->ip_ttl < 2) {
+      /* TTL too low */
+      sr_sendpacket_ICMP(sr, packet, len, interface, 11, 0);
+    } else {
+      printf("forward packet\n");
+      sr_forwardpacket_IP(sr, packet, len, interface, IP_hdr);
+    }
   }
   
 }
@@ -312,8 +317,8 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
       free(sr_packet);
     }
   }
-  if (type == 3) {
-    printf("It's a type 3\n");
+  if (type == 3 || type == 11) {
+    printf("It's a type %d\n", type);
     unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
     uint8_t *sr_packet = (uint8_t *) malloc(length);
     struct sr_if* out_interface = sr_get_interface(sr, interface);
@@ -323,7 +328,7 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
     ICMP_IP_hdr->ip_hl = orig_IP_hdr->ip_hl;
     ICMP_IP_hdr->ip_tos = orig_IP_hdr->ip_tos;
     ICMP_IP_hdr->ip_v = orig_IP_hdr->ip_v;
-    ICMP_IP_hdr->ip_len = htons(sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t));;
+    ICMP_IP_hdr->ip_len = htons(sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t));
     ICMP_IP_hdr->ip_id = orig_IP_hdr->ip_id;
     ICMP_IP_hdr->ip_off = orig_IP_hdr->ip_off;
 
@@ -334,7 +339,11 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
     memset(ICMP_ETH_hdr->ether_dhost, 255, ETHER_ADDR_LEN);
     ICMP_IP_hdr->ip_dst = orig_IP_hdr->ip_src;
 
-    ICMP_IP_hdr->ip_src = orig_IP_hdr->ip_dst;
+    if (code == 0) {
+      ICMP_IP_hdr->ip_src = out_interface->ip;
+    } else {
+      ICMP_IP_hdr->ip_src = orig_IP_hdr->ip_dst;
+    }
     memcpy(ICMP_ETH_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
     ICMP_IP_hdr->ip_sum = cksum(ICMP_IP_hdr, sizeof(sr_ip_hdr_t));
 
