@@ -272,13 +272,7 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
 
   if (type == 0) {
     printf("It's a type 0\n");
-    unsigned int orig_len = len - sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_hdr_t);
-    uint8_t *orig = (uint8_t *) (packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_hdr_t));
-    unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_hdr_t) + orig_len;
     uint8_t *sr_packet = (uint8_t *) malloc(len);
-    printf("LENGTHS ARE HERE\n");
-    printf("%d\n", length);
-    printf("%d\n", len);
     memcpy(sr_packet, packet, len);
     sr_ip_hdr_t *ICMP_IP_hdr = (sr_ip_hdr_t *) (sr_packet + sizeof(sr_ethernet_hdr_t));
 
@@ -328,7 +322,8 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
     ICMP_IP_hdr->ip_hl = orig_IP_hdr->ip_hl;
     ICMP_IP_hdr->ip_tos = orig_IP_hdr->ip_tos;
     ICMP_IP_hdr->ip_v = orig_IP_hdr->ip_v;
-    ICMP_IP_hdr->ip_len = htons(sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t));
+    printf("%d\n", orig_IP_hdr->ip_hl * 4);
+    ICMP_IP_hdr->ip_len = htons(((orig_IP_hdr->ip_hl) * 4) + 8 + sizeof(struct sr_icmp_hdr) + 5);
     ICMP_IP_hdr->ip_id = orig_IP_hdr->ip_id;
     ICMP_IP_hdr->ip_off = orig_IP_hdr->ip_off;
 
