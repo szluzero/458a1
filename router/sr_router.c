@@ -237,8 +237,8 @@ void sr_forwardpacket_IP(struct sr_instance* sr,
       free(arp_entry);
     } else {
       printf("Not in the cache\n");
-      /*_ethernet_hdr_t *ethernet_hdr = (sr_ethernet_hdr_t *) packet;
-      memcpy(ethernet_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);*/
+      sr_ethernet_hdr_t *ethernet_hdr = (sr_ethernet_hdr_t *) packet;
+      memcpy(ethernet_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
       sr_arpcache_queuereq(&sr->cache, dest_ip, packet, len, match->interface);
     }
     free(match);
