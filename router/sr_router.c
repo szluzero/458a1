@@ -276,12 +276,6 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
 {
   sr_ip_hdr_t *orig_IP_hdr = (sr_ip_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
 
-  if (orig_IP_hdr->ip_ttl < 2) {
-    type = 0;
-    code = 0;
-    type = 11;
-    code = 0;
-  }
   if (type == 0) {
     printf("It's a type 0\n");
     uint8_t *sr_packet = (uint8_t *) malloc(len);
