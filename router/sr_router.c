@@ -258,16 +258,17 @@ void sr_handlepacket_ICMP(struct sr_instance* sr,
   
   if (IP_hdr->ip_ttl < 2) {
     sr_sendpacket_ICMP(sr, packet, len, interface, 11, 0);
+  } else {
+    /* Verify checksum */
+    uint16_t given_cksum = ICMP_hdr->icmp_sum;
+    ICMP_hdr->icmp_sum = 0;
+    uint16_t expected_cksum = cksum(ICMP_hdr, ntohs(IP_hdr->ip_len) - sizeof(sr_ip_hdr_t));
+    if (given_cksum != expected_cksum) {
+      printf("cksum wrong\n");
+      return;
+    }
+    sr_sendpacket_ICMP(sr, packet, len, interface, 0, 0);
   }
-  /* Verify checksum */
-  uint16_t given_cksum = ICMP_hdr->icmp_sum;
-  ICMP_hdr->icmp_sum = 0;
-  uint16_t expected_cksum = cksum(ICMP_hdr, ntohs(IP_hdr->ip_len) - sizeof(sr_ip_hdr_t));
-  if (given_cksum != expected_cksum) {
-    printf("cksum wrong\n");
-    return;
-  }
-  sr_sendpacket_ICMP(sr, packet, len, interface, 0, 0);
 }
 
 void sr_sendpacket_ICMP(struct sr_instance* sr,
