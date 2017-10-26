@@ -256,19 +256,15 @@ void sr_handlepacket_ICMP(struct sr_instance* sr,
   sr_ip_hdr_t *IP_hdr = (sr_ip_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
   sr_icmp_hdr_t *ICMP_hdr = (sr_icmp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
   
-  if (IP_hdr->ip_ttl < 2) {
-    sr_sendpacket_ICMP(sr, packet, len, interface, 11, 0);
-  } else {
-    /* Verify checksum */
-    uint16_t given_cksum = ICMP_hdr->icmp_sum;
-    ICMP_hdr->icmp_sum = 0;
-    uint16_t expected_cksum = cksum(ICMP_hdr, ntohs(IP_hdr->ip_len) - sizeof(sr_ip_hdr_t));
-    if (given_cksum != expected_cksum) {
-      printf("cksum wrong\n");
-      return;
-    }
-    sr_sendpacket_ICMP(sr, packet, len, interface, 0, 0);
+  /* Verify checksum */
+  uint16_t given_cksum = ICMP_hdr->icmp_sum;
+  ICMP_hdr->icmp_sum = 0;
+  uint16_t expected_cksum = cksum(ICMP_hdr, ntohs(IP_hdr->ip_len) - sizeof(sr_ip_hdr_t));
+  if (given_cksum != expected_cksum) {
+    printf("cksum wrong\n");
+    return;
   }
+  sr_sendpacket_ICMP(sr, packet, len, interface, 0, 0);
 }
 
 void sr_sendpacket_ICMP(struct sr_instance* sr,
@@ -280,6 +276,12 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
 {
   sr_ip_hdr_t *orig_IP_hdr = (sr_ip_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
 
+  if (orig_IP_hdr->ip_ttl < 2) {
+    type = 0;
+    code = 0;
+    type = 11;
+    code = 0;
+  }
   if (type == 0) {
     printf("It's a type 0\n");
     uint8_t *sr_packet = (uint8_t *) malloc(len);
