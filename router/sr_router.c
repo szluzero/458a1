@@ -314,7 +314,8 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
   }
   if (type == 3) {
     printf("It's a type 3\n");
-    uint8_t *sr_packet = (uint8_t *) malloc(len);
+    unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
+    uint8_t *sr_packet = (uint8_t *) malloc(length);
     struct sr_if* out_interface = sr_get_interface(sr, interface);
     sr_ethernet_hdr_t *ICMP_ETH_hdr = (sr_ethernet_hdr_t *) sr_packet;
     sr_ip_hdr_t *ICMP_IP_hdr = (sr_ip_hdr_t *) (sr_packet + sizeof(sr_ethernet_hdr_t));
@@ -322,8 +323,7 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
     ICMP_IP_hdr->ip_hl = orig_IP_hdr->ip_hl;
     ICMP_IP_hdr->ip_tos = orig_IP_hdr->ip_tos;
     ICMP_IP_hdr->ip_v = orig_IP_hdr->ip_v;
-    printf("%d\n", orig_IP_hdr->ip_hl * 4);
-    ICMP_IP_hdr->ip_len = htons(((orig_IP_hdr->ip_hl) * 4) + 8 + sizeof(struct sr_icmp_hdr) + 5);
+    ICMP_IP_hdr->ip_len = htons(sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t));;
     ICMP_IP_hdr->ip_id = orig_IP_hdr->ip_id;
     ICMP_IP_hdr->ip_off = orig_IP_hdr->ip_off;
 
@@ -338,7 +338,7 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
     memcpy(ICMP_ETH_hdr->ether_shost, out_interface->addr, ETHER_ADDR_LEN);
     ICMP_IP_hdr->ip_sum = cksum(ICMP_IP_hdr, sizeof(sr_ip_hdr_t));
 
-    sr_icmp_t3_hdr_t *ICMP_hdr = (sr_icmp_t3_hdr_t *) (sr_packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
+    sr_icmp_t3_hdr_t *ICMP_hdr = (sr_icmp_t3_hdr_t *)(sr_packet + sizeof(sr_ethernet_hdr_t) + (ICMP_IP_hdr->ip_hl * 4));
     ICMP_hdr->icmp_type = type;
     ICMP_hdr->icmp_code = code;
     ICMP_hdr->icmp_sum = 0;
@@ -355,7 +355,7 @@ void sr_sendpacket_ICMP(struct sr_instance* sr,
       printf("In cache\n");
       print_hdrs(sr_packet, len);
       memcpy(ICMP_ETH_hdr->ether_dhost, arp_entry->mac, ETHER_ADDR_LEN);
-      sr_send_packet(sr, sr_packet, len, interface);
+      sr_send_packet(sr, sr_packet, length, interface);
     } else {
       printf("Not in cache\n");
       print_hdrs(sr_packet, len);
