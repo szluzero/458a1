@@ -208,15 +208,12 @@ void sr_forwardpacket_IP(struct sr_instance* sr,
   /* Longest prefix match */
   uint32_t dest_ip = IP_hdr->ip_dst;
   struct sr_rt* rt = sr->routing_table;
-  unsigned long int longest_match_len = 0;
   struct sr_rt* match = 0;
-
+  printf("%d\n", dest_ip & rt->mask.s_addr);
   while (rt) {
-    if ((dest_ip & rt->mask.s_addr) == (rt->dest.s_addr & rt->mask.s_addr)) {
-        if (longest_match_len <= rt->mask.s_addr) {
-          longest_match_len = rt->mask.s_addr;
-	  match = rt;
-	}
+    printf("%d\n", rt->dest.s_addr & rt->mask.s_addr);
+    if ((dest_ip) == (rt->dest.s_addr & rt->mask.s_addr)) {
+      match = rt;
     }
     rt = rt->next;
   }
